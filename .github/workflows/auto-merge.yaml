@@ -39,18 +39,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Converte o nome da branch para maiúsculo
           UPPERCASE_BRANCH=$(echo "${{ matrix.client_branch }}" | tr '[:lower:]' '[:upper:]')
           
-          # Obtém a data atual no formato DD/MM/AAAA
           CURRENT_DATE=$(date +%d/%m/%Y)
           
-          # Cria o título do PR
           PR_TITLE="ATUALIZAÇÃO ${UPPERCASE_BRANCH} - ${CURRENT_DATE}"
           
           gh pr create \
             --title "$PR_TITLE" \
-            --body "Este PR foi criado automaticamente para propagar as mudanças da main para ${{ matrix.client_branch }}.
+            --body "Este PR foi criado automaticamente da main para ${{ matrix.client_branch }}.
 
           ## 🔍 O que fazer:
           1. Revise as mudanças
