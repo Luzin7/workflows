@@ -1,1 +1,1 @@
-console.log("Hello world! Confectus is the best!");
+console.log('Hello world! Confectus is the best!');
