@@ -1,0 +1,108 @@
+name: Auto Merge to Clients Branches
+
+on:
+  push:
+    tags:
+      - 'release*'
+
+jobs:
+  merge_to_clients:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repository Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Checkout master
+        run: |
+          git checkout master
+          git pull origin master
+
+      - name: Define client branches
+        id: define_branches
+        run: |
+          BRANCHES="cliente1 cliente2 cliente3"
+          echo "Branches definidas: $BRANCHES"
+          echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
+
+      - name: Merge to clients branches
+        run: |
+          # Converte a string de branches em um array
+          IFS=' ' read -ra BRANCHES <<< "${{ steps.define_branches.outputs.branches }}"
+          
+          for branch in "${BRANCHES[@]}"; do
+            echo "=== Iniciando processo para $branch ==="
+            
+            git checkout $branch
+            git pull origin $branch
+            
+            if git merge origin/master --no-edit; then
+              echo "✅ Merge bem-sucedido para $branch"
+              git push origin $branch
+            else
+              echo "❌ Conflito detectado em $branch"
+              git merge --abort
+              
+              PR_BRANCH="auto-merge/master-to-${branch}"
+              git checkout -b $PR_BRANCH master
+              
+              if git merge $branch --no-commit --no-ff; then
+                git merge --abort
+                echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
+                echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
+                echo "CONFLICT=true" >> $GITHUB_ENV
+              else
+                echo "⚠️ Não foi possível criar base para PR em $branch"
+              fi
+            fi
+          done
+
+      - name: Create Pull Request
+        if: env.CONFLICT == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          branch: ${{ env.PR_BRANCH }}
+          base: ${{ env.TARGET_BRANCH }}
+          title: "🔄 Auto-merge: master → ${{ env.TARGET_BRANCH }}"
+          body: |
+            # Merge Automático
+            
+            Este PR foi criado automaticamente porque foram detectados conflitos 
+            durante a tentativa de merge automático da master para ${{ env.TARGET_BRANCH }}.
+            
+            ## 🔍 O que fazer:
+            1. Revise os conflitos
+            2. Faça as correções necessárias
+            3. Aprove e faça merge do PR
+            
+            ## 📝 Detalhes:
+            - Branch origem: `master`
+            - Branch destino: `${{ env.TARGET_BRANCH }}`
+            - Tag que disparou: `${{ github.ref_name }}`
+          labels: |
+            automated-pr
+            needs-review
+            conflict-resolution
+
+      - name: Success Summary
+        if: success()
+        run: |
+          echo "=== 🎉 Resumo da Execução ==="
+          echo "Tag que disparou: ${{ github.ref_name }}"
+          echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
+          echo "✅ Processo concluído com sucesso!"
+
+      - name: Failure Summary
+        if: failure()
+        run: |
+          echo "=== ❌ Resumo da Execução ==="
+          echo "Tag que disparou: ${{ github.ref_name }}"
+          echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
+          echo "⚠️ Algumas branches falharam no processo."
+          echo "PRs foram criados para as branches com conflitos."
