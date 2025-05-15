@@ -8,6 +8,10 @@ on:
 jobs:
   create_prs:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        client_branch: [cliente1, cliente2, cliente3]
+
     steps:
       - name: Repository Checkout
         uses: actions/checkout@v4
@@ -19,88 +23,42 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions@github.com"
 
-      - name: Checkout main
+      - name: Fetch and prepare PR branch
         run: |
-          git checkout main
-          git pull origin main
-
-      - name: Define client branches
-        id: define_branches
-        run: |
-          BRANCHES="cliente1 cliente2 cliente3"  # Substitua com os nomes reais
-          echo "Branches definidas: $BRANCHES"
-          echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
-
-      - name: Create PRs for clients
-        run: |
-          IFS=' ' read -ra BRANCHES <<< "${{ steps.define_branches.outputs.branches }}"
-          
-          for branch in "${BRANCHES[@]}"; do
-            echo "=== Iniciando processo para $branch ==="
-            
-            git checkout $branch
-            git pull origin $branch
-            
-            PR_BRANCH="auto-merge/main-to-${branch}"
-            git checkout -b $PR_BRANCH main
-            
-            if git merge $branch --no-commit --no-ff; then
-              git merge --abort
-              echo "✅ Branch $branch preparada para PR"
-              echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
-              echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
-              echo "CONFLICT=false" >> $GITHUB_ENV
-            else
-              echo "❌ Conflito detectado em $branch"
-              git merge --abort
-              echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
-              echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
-              echo "CONFLICT=true" >> $GITHUB_ENV
-            fi
-          done
+          git fetch origin ${{ matrix.client_branch }}:${{ matrix.client_branch }}
+          git checkout -b auto-merge/main-to-${{ matrix.client_branch }} ${{ matrix.client_branch }}
+          if git merge origin/main --no-edit; then
+            echo "CONFLICT=false" >> $GITHUB_ENV
+          else
+            echo "CONFLICT=true" >> $GITHUB_ENV
+            git merge --abort
+          fi
+          git push origin auto-merge/main-to-${{ matrix.client_branch }}
 
       - name: Create Pull Request
-        if: always()
-        uses: peter-evans/create-pull-request@v5
-        with:
-          branch: ${{ env.PR_BRANCH }}
-          base: ${{ env.TARGET_BRANCH }}
-          title: "ATUALIZAÇÃO - ${{ github.ref_name }}: main → ${{ env.TARGET_BRANCH }}"
-          body: |
-            Este PR foi criado automaticamente para propagar as mudanças da main para ${{ env.TARGET_BRANCH }}.
-            
-            ## 🔍 O que fazer:
-            1. Revise as mudanças
-            2. Assine o PR
-            3. Faça merge do PR
-            
-            ## 📝 Detalhes:
-            - Branch origem: `main`
-            - Branch destino: `${{ env.TARGET_BRANCH }}`
-            - Tag que disparou: `${{ github.ref_name }}`
-            - Conflitos: ${{ env.CONFLICT == 'true' && 'Sim' || 'Não' }}
-            
-            ---
-            
-            Atenciosamente,
-            
-            [Luan Victor]
-          labels: |
-            automated-pr
-            needs-review
-
-      - name: Success Summary
-        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "=== 🎉 Resumo da Execução ==="
-          echo "Tag que disparou: ${{ github.ref_name }}"
-          echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
-          echo "✅ PRs criados para todas as branches!"
+          gh pr create \
+            --title "ATUALIZAÇÃO - ${{ github.ref_name }}: main → ${{ matrix.client_branch }}" \
+            --body "Este PR foi criado automaticamente para propagar as mudanças da main para ${{ matrix.client_branch }}.
 
-      - name: Failure Summary
-        if: failure()
-        run: |
-          echo "=== ❌ Resumo da Execução ==="
-          echo "Tag que disparou: ${{ github.ref_name }}"
-          echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
-          echo "⚠️ Falha ao criar PRs para algumas branches."
+          ## 🔍 O que fazer:
+          1. Revise as mudanças
+          2. Assine o PR
+          3. Faça merge do PR
+
+          ## 📝 Detalhes:
+          - Branch origem: \`main\`
+          - Branch destino: \`${{ matrix.client_branch }}\`
+          - Tag que disparou: \`${{ github.ref_name }}\`
+          - Conflitos: $([ \"$CONFLICT\" == \"true\" ] && echo \"Sim\" || echo \"Não\")
+
+          ---
+
+          Atenciosamente,
+
+          [Luan Victor]" \
+                      --base ${{ matrix.client_branch }} \
+                      --head auto-merge/main-to-${{ matrix.client_branch }} \
+                      --label "automated-pr,needs-review"
