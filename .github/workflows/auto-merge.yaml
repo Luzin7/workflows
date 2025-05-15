@@ -3,7 +3,7 @@ name: Auto Create PRs for Clients
 on:
   push:
     tags:
-      - 'release-clients*'
+      - 'release*'
 
 jobs:
   create_prs:
