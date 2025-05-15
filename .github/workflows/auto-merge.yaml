@@ -1,12 +1,12 @@
-name: Auto Merge to Clients Branches
+name: Auto Create PRs for Clients
 
 on:
   push:
     tags:
-      - 'release*'
+      - 'release-clients*'
 
 jobs:
-  merge_to_clients:
+  create_prs:
     runs-on: ubuntu-latest
     steps:
       - name: Repository Checkout
@@ -27,13 +27,12 @@ jobs:
       - name: Define client branches
         id: define_branches
         run: |
-          BRANCHES="cliente1 cliente2 cliente3"
+          BRANCHES="cliente1 cliente2 cliente3"  # Substitua com os nomes reais
           echo "Branches definidas: $BRANCHES"
           echo "branches=$BRANCHES" >> $GITHUB_OUTPUT
 
-      - name: Merge to clients branches
+      - name: Create PRs for clients
         run: |
-          # Converte a string de branches em um array
           IFS=' ' read -ra BRANCHES <<< "${{ steps.define_branches.outputs.branches }}"
           
           for branch in "${BRANCHES[@]}"; do
@@ -42,53 +41,53 @@ jobs:
             git checkout $branch
             git pull origin $branch
             
-            if git merge origin/main --no-edit; then
-              echo "✅ Merge bem-sucedido para $branch"
-              git push origin $branch
+            PR_BRANCH="auto-merge/main-to-${branch}"
+            git checkout -b $PR_BRANCH main
+            
+            if git merge $branch --no-commit --no-ff; then
+              git merge --abort
+              echo "✅ Branch $branch preparada para PR"
+              echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
+              echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
+              echo "CONFLICT=false" >> $GITHUB_ENV
             else
               echo "❌ Conflito detectado em $branch"
               git merge --abort
-              
-              PR_BRANCH="auto-merge/main-to-${branch}"
-              git checkout -b $PR_BRANCH main
-              
-              if git merge $branch --no-commit --no-ff; then
-                git merge --abort
-                echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
-                echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
-                echo "CONFLICT=true" >> $GITHUB_ENV
-              else
-                echo "⚠️ Não foi possível criar base para PR em $branch"
-              fi
+              echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
+              echo "TARGET_BRANCH=$branch" >> $GITHUB_ENV
+              echo "CONFLICT=true" >> $GITHUB_ENV
             fi
           done
 
       - name: Create Pull Request
-        if: env.CONFLICT == 'true'
+        if: always()
         uses: peter-evans/create-pull-request@v5
         with:
           branch: ${{ env.PR_BRANCH }}
           base: ${{ env.TARGET_BRANCH }}
-          title: "🔄 Auto-merge: main → ${{ env.TARGET_BRANCH }}"
+          title: "ATUALIZAÇÃO - ${{ github.ref_name }}: main → ${{ env.TARGET_BRANCH }}"
           body: |
-            # Merge Automático
-            
-            Este PR foi criado automaticamente porque foram detectados conflitos 
-            durante a tentativa de merge automático da main para ${{ env.TARGET_BRANCH }}.
+            Este PR foi criado automaticamente para propagar as mudanças da main para ${{ env.TARGET_BRANCH }}.
             
             ## 🔍 O que fazer:
-            1. Revise os conflitos
-            2. Faça as correções necessárias
-            3. Aprove e faça merge do PR
+            1. Revise as mudanças
+            2. Assine o PR
+            3. Faça merge do PR
             
             ## 📝 Detalhes:
             - Branch origem: `main`
             - Branch destino: `${{ env.TARGET_BRANCH }}`
             - Tag que disparou: `${{ github.ref_name }}`
+            - Conflitos: ${{ env.CONFLICT == 'true' && 'Sim' || 'Não' }}
+            
+            ---
+            
+            Atenciosamente,
+            
+            [Luan Victor]
           labels: |
             automated-pr
             needs-review
-            conflict-resolution
 
       - name: Success Summary
         if: success()
@@ -96,7 +95,7 @@ jobs:
           echo "=== 🎉 Resumo da Execução ==="
           echo "Tag que disparou: ${{ github.ref_name }}"
           echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
-          echo "✅ Processo concluído com sucesso!"
+          echo "✅ PRs criados para todas as branches!"
 
       - name: Failure Summary
         if: failure()
@@ -104,5 +103,4 @@ jobs:
           echo "=== ❌ Resumo da Execução ==="
           echo "Tag que disparou: ${{ github.ref_name }}"
           echo "Branches processadas: ${{ steps.define_branches.outputs.branches }}"
-          echo "⚠️ Algumas branches falharam no processo."
-          echo "PRs foram criados para as branches com conflitos."
+          echo "⚠️ Falha ao criar PRs para algumas branches."
