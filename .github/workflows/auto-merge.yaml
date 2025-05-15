@@ -61,4 +61,3 @@ jobs:
           [Luan Victor]" \
                       --base ${{ matrix.client_branch }} \
                       --head auto-merge/main-to-${{ matrix.client_branch }} \
-                      --label "automated-pr,needs-review"
