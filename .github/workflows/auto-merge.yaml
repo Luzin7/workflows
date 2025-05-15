@@ -58,12 +58,6 @@ jobs:
           - Branch origem: \`main\`
           - Branch destino: \`${{ matrix.client_branch }}\`
           - Tag que disparou: \`${{ github.ref_name }}\`
-          - Conflitos: $([ \"$CONFLICT\" == \"true\" ] && echo \"Sim\" || echo \"Não\")
-
-          ---
-
-          Atenciosamente,
-
-          [Luan Victor]" \
+          - Conflitos: $([ \"$CONFLICT\" == \"true\" ] && echo \"Sim\" || echo \"Não\")" \
                       --base ${{ matrix.client_branch }} \
                       --head auto-merge/main-to-${{ matrix.client_branch }} \
